@@ -1,38 +1,78 @@
 import React,{ useEffect,useRef,useState } from "react";
 import { ZegoUIKitPrebuilt } from "@zegocloud/zego-uikit-prebuilt";
+import axios from "axios";
 
 function randomID(len = 5) {
     const chars = '12345qwertyuiopasdfgh67890jklmnbvcxzMNBVCZXASDQWERTYHGFUIOLKJP';
-    let result = '';
-    for (let i = 0; i < len; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-}
-
-function getUrlParams() {
-    return new URLSearchParams(window.location.search);
+    return Array.from({ length: len },() => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 export default function UserCall() {
     const containerRef = useRef(null);
-    const [roomID,setRoomID] = useState(getUrlParams().get("roomID") || "");
+    const [roomID,setRoomID] = useState("");
     const [startCall,setStartCall] = useState(false);
+    const [userId,setUserId] = useState("");
+    const [trainerId,setTrainerId] = useState("");
 
+    // ✅ Lấy params từ URL
     useEffect(() => {
-        if (!startCall) return;
+        const params = new URLSearchParams(window.location.search);
+        const autoJoin = params.get("autoJoin") === "true";
+        const roomFromURL = params.get("roomID");
+        const userIDFromURL = params.get("userID") || `user_${randomID()}`;
+        const userNameFromURL = params.get("userName") || `User_${randomID()}`;
 
-        const userID = randomID();
+        if (autoJoin && roomFromURL) {
+            setRoomID(roomFromURL);
+            setUserId(userIDFromURL);
+            setStartCall(true);
+
+            const appID = 795723764;
+            const serverSecret = "8781bdc781148d78d309bd38e80ff3da";
+
+            const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+                appID,
+                serverSecret,
+                roomFromURL,
+                userIDFromURL,
+                userNameFromURL
+            );
+
+            const zp = ZegoUIKitPrebuilt.create(kitToken);
+
+            zp.joinRoom({
+                container: containerRef.current,
+                sharedLinks: [
+                    {
+                        name: "Copy Link",
+                        url: `${window.location.origin}${window.location.pathname}?roomID=${roomFromURL}&userID=${userIDFromURL}&userName=${userNameFromURL}&autoJoin=true`,
+                    },
+                ],
+                scenario: {
+                    mode: ZegoUIKitPrebuilt.OneONoneCall,
+                },
+                onLeaveRoom: () => {
+                    window.location.href = "/";
+                }
+            });
+        }
+    },[]);
+
+    // ✅ Khi user nhấn join/create thủ công
+    useEffect(() => {
+        if (!startCall || !roomID) return;
+
         const userName = "User_" + randomID();
+        const userZegoID = "user_" + randomID();
 
-        const appID = 795723764; // <-- Replace with real App ID
-        const serverSecret = "8781bdc781148d78d309bd38e80ff3da"; // <-- Replace with real Secret
+        const appID = 795723764;
+        const serverSecret = "8781bdc781148d78d309bd38e80ff3da";
 
         const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
             appID,
             serverSecret,
             roomID,
-            userID,
+            userZegoID,
             userName
         );
 
@@ -43,14 +83,42 @@ export default function UserCall() {
             sharedLinks: [
                 {
                     name: "Copy Link",
-                    url: `${window.location.protocol}//${window.location.host}${window.location.pathname}?roomID=${roomID}`,
+                    url: `${window.location.origin}${window.location.pathname}?roomID=${roomID}&userID=${userZegoID}&userName=${userName}&autoJoin=true`,
                 },
             ],
             scenario: {
                 mode: ZegoUIKitPrebuilt.OneONoneCall,
             },
+            onLeaveRoom: () => {
+                window.location.href = "/";
+            }
         });
-    },[startCall]);
+    },[startCall,roomID]);
+
+    const handleCreateRoom = async () => {
+        if (!userId || !trainerId) {
+            alert("Please enter both User ID and Trainer ID.");
+            return;
+        }
+
+        try {
+            const response = await axios.post("http://localhost:7066/api/v1/callsupport/create-room",{
+                userId: parseInt(userId),
+                trainerId: parseInt(trainerId)
+            });
+
+            const data = response.data?.data;
+            if (data?.roomId) {
+                setRoomID(data.roomId);
+                setStartCall(true);
+            } else {
+                alert("Failed to create room.");
+            }
+        } catch (error) {
+            console.error("Error creating room:",error);
+            alert("Failed to create room.");
+        }
+    };
 
     if (startCall) {
         return <div ref={containerRef} style={{ width: "100vw",height: "100vh" }} />;
@@ -59,25 +127,39 @@ export default function UserCall() {
     return (
         <div style={{ padding: 20,textAlign: "center" }}>
             <h2>Join or Create a Video Call Room</h2>
-            <input
-                type="text"
-                placeholder="Enter Room ID"
-                value={roomID}
-                onChange={(e) => setRoomID(e.target.value)}
-                style={{ padding: 10,width: 250 }}
-            />
-            <div style={{ marginTop: 10 }}>
+
+            <div style={{ marginBottom: 10 }}>
+                <input
+                    type="text"
+                    placeholder="Enter User ID"
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    style={{ padding: 10,width: 250,marginRight: 10 }}
+                />
+                <input
+                    type="text"
+                    placeholder="Enter Trainer ID"
+                    value={trainerId}
+                    onChange={(e) => setTrainerId(e.target.value)}
+                    style={{ padding: 10,width: 250 }}
+                />
+            </div>
+
+            <div style={{ marginBottom: 10 }}>
+                <input
+                    type="text"
+                    placeholder="Enter Room ID to Join"
+                    value={roomID}
+                    onChange={(e) => setRoomID(e.target.value)}
+                    style={{ padding: 10,width: 520 }}
+                />
+            </div>
+
+            <div>
                 <button onClick={() => setStartCall(true)} style={{ padding: 10,marginRight: 10 }}>
                     Join Room
                 </button>
-                <button
-                    onClick={() => {
-                        const newRoom = randomID(8);
-                        setRoomID(newRoom);
-                        setStartCall(true);
-                    }}
-                    style={{ padding: 10 }}
-                >
+                <button onClick={handleCreateRoom} style={{ padding: 10 }}>
                     Create New Room
                 </button>
             </div>
