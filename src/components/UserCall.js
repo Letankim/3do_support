@@ -27,8 +27,8 @@ export default function UserCall() {
             setUserId(userIDFromURL);
             setStartCall(true);
 
-            const appID = 795723764;
-            const serverSecret = "8781bdc781148d78d309bd38e80ff3da";
+            const appID = 1612291838;
+            const serverSecret = "c6fb2e9fa77b45019cd0050c00f491f3";
 
             const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
                 appID,
